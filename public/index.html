@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebSocket Chat Demo</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script defer src="/main.js"></script>
+</head>
+<body>
+  <div id="chat-container">
+    <aside id="rooms">
+      <h2>Rooms</h2>
+      <ul id="room-list"></ul>
+      <input id="room-input" placeholder="Room name" />
+      <button id="join-btn">Join</button>
+    </aside>
+    <section id="chat">
+      <header>
+        <h2 id="current-room">No room</h2>
+        <button id="leave-btn" disabled>Leave</button>
+      </header>
+      <div id="messages"></div>
+      <footer>
+        <input id="msg-input" placeholder="Type a message" disabled />
+        <button id="send-btn" disabled>Send</button>
+      </footer>
+    </section>
+    <aside id="users">
+      <h2>Users</h2>
+      <ul id="user-list"></ul>
+    </aside>
+  </div>
+</body>
+</html>
