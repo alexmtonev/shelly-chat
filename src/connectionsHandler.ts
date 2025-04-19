@@ -41,20 +41,6 @@ export default class ConnectionsHandler {
     this.clients.delete(clientId);
   }
 
-  public listRooms(): string[] {
-    return Array.from(this.rooms.keys());
-  }
-
-  public getClientRooms(clientId: string): string[] {
-    const client = this.clients.get(clientId);
-    return client ? Array.from(client.rooms) : [];
-  }
-
-  public listRoomUsers(roomName: string): string[] {
-    const room = this.rooms.get(roomName);
-    return room ? Array.from(room.clients) : [];
-  }
-
   public joinRoom(
     clientId: string,
     roomName: string
@@ -68,6 +54,8 @@ export default class ConnectionsHandler {
     if (!room) {
       room = { name: roomName, clients: new Set(), type: ERoomType.Public };
       this.rooms.set(roomName, room);
+      // Update Room List for everyone on newly created room
+      this.broadcastRoomList();
     }
 
     // Link both sides
@@ -77,7 +65,7 @@ export default class ConnectionsHandler {
     // Notify client
     client.ws.send(JSON.stringify({ type: 'subscribed', room: roomName }));
     // Broadcast updated user list
-    this.broadcastUserList(roomName);
+    this.broadcastRoomUserList(roomName);
   }
 
   public leaveRoom(clientId: string, roomName: string): void {
@@ -89,6 +77,7 @@ export default class ConnectionsHandler {
       room.clients.delete(clientId);
       if (room.clients.size === 0) {
         this.rooms.delete(roomName);
+        this.broadcastRoomList();
       }
     }
 
@@ -96,9 +85,26 @@ export default class ConnectionsHandler {
     client.ws.send(JSON.stringify({ type: 'unsubscribed', room: roomName }));
 
     if (room) {
-      this.broadcastUserList(roomName);
+      this.broadcastRoomUserList(roomName);
     }
   }
+
+  public sendRoomList(clientId: string): void {
+    const client = this.clients.get(clientId);
+    if (!client) return;
+  
+    const rooms = this.listPublicRooms();
+  
+    client.ws.send(JSON.stringify({ type: 'rooms', rooms }));
+  }
+  
+  public broadcastRoomList(): void {
+    const rooms = this.listPublicRooms()
+  
+    for (const clientData of this.clients.values()) {
+      clientData.ws.send(JSON.stringify({ type: 'rooms', rooms }));
+    }
+  }  
 
   public sendUserList(clientId: string, roomName: string): void {
     const client = this.clients.get(clientId);
@@ -112,7 +118,7 @@ export default class ConnectionsHandler {
     client.ws.send(JSON.stringify({ type: 'users', room: roomName, users }));
   }
 
-  public broadcastUserList(roomName: string): void {
+  public broadcastRoomUserList(roomName: string): void {
     const room = this.rooms.get(roomName);
     if (!room) return;
 
@@ -121,10 +127,6 @@ export default class ConnectionsHandler {
       const client = this.clients.get(id);
       client?.ws.send(JSON.stringify({ type: 'users', room: roomName, users }));
     }
-  }
-
-  public broadcastRoomList(): void {
-    
   }
 
   public broadcastMessage(
@@ -147,5 +149,11 @@ export default class ConnectionsHandler {
       const client = this.clients.get(id);
       client?.ws.send(payload);
     }
+  }
+
+  private listPublicRooms(): string[] {
+    return Array.from(this.rooms.values())
+    .filter(r => r.type === ERoomType.Public)
+    .map(r => r.name);
   }
 }

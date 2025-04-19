@@ -2,8 +2,7 @@ import express from 'express';
 import http from 'http';
 import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { v4 as uuidv4 } from 'uuid';
-import ConnectionsHandler, { ERoomType } from './connectionsHandler';
+import ConnectionsHandler from './connectionsHandler';
 
 // Initialize Express and HTTP server
 const app = express();
@@ -14,20 +13,20 @@ const wss = new WebSocketServer({ server });
 const publicDir = path.join(__dirname, '../public');
 app.use(express.static(publicDir));
 
-// Initialize our connection state manager
 const connections = new ConnectionsHandler();
 
-// Incoming message types
 type IncomingMessage =
   | { type: 'listRooms' }
-  | { type: 'subscribe'; room: string; roomType?: ERoomType }
+  | { type: 'subscribe'; room: string; }
   | { type: 'unsubscribe'; room: string }
   | { type: 'listUsers'; room: string }
   | { type: 'message'; room: string; message: string };
 
-// Handle new WebSocket connections
+type OutgoingMessage = 
+  | {};
+
 wss.on('connection', (ws: WebSocket) => {
-  const clientId = uuidv4();
+  const clientId = crypto.randomUUID();
   console.log(`Client connected: ${clientId}`);
 
   // Register client
@@ -48,8 +47,7 @@ wss.on('connection', (ws: WebSocket) => {
 
     switch (msg.type) {
       case 'listRooms':
-        const rooms = connections.listRooms();
-        ws.send(JSON.stringify({ type: 'rooms', rooms }));
+        connections.sendRoomList(clientId)
         break;
 
       case 'subscribe':
