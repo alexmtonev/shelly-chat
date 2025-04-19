@@ -9,9 +9,13 @@ export type ClientData = {
 export type RoomData = {
   name: string;
   clients: Set<string>;
-  type: 'public' | 'private';
+  type: ERoomType;
 };
 
+export enum ERoomType {
+  Public = 'public',
+  Private = 'private'
+}
 export default class ConnectionsHandler {
   public rooms: Map<string, RoomData>;
   public clients: Map<string, ClientData>;
@@ -53,8 +57,7 @@ export default class ConnectionsHandler {
 
   public joinRoom(
     clientId: string,
-    roomName: string,
-    roomType: 'public' | 'private' = 'public'
+    roomName: string
   ): void {
     // Ensure client exists
     const client = this.clients.get(clientId);
@@ -63,7 +66,7 @@ export default class ConnectionsHandler {
     // Get or create room
     let room = this.rooms.get(roomName);
     if (!room) {
-      room = { name: roomName, clients: new Set(), type: roomType };
+      room = { name: roomName, clients: new Set(), type: ERoomType.Public };
       this.rooms.set(roomName, room);
     }
 
@@ -118,6 +121,10 @@ export default class ConnectionsHandler {
       const client = this.clients.get(id);
       client?.ws.send(JSON.stringify({ type: 'users', room: roomName, users }));
     }
+  }
+
+  public broadcastRoomList(): void {
+    
   }
 
   public broadcastMessage(
