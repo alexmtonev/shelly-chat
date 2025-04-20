@@ -3,6 +3,7 @@ import http from 'http';
 import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import ConnectionsHandler from './connectionsHandler';
+import { IncomingMessage } from './dto';
 
 // Initialize Express and HTTP server
 const app = express();
@@ -14,16 +15,6 @@ const publicDir = path.join(__dirname, '../public');
 app.use(express.static(publicDir));
 
 const connections = new ConnectionsHandler();
-
-type IncomingMessage =
-  | { type: 'listRooms' }
-  | { type: 'subscribe'; room: string; }
-  | { type: 'unsubscribe'; room: string }
-  | { type: 'listUsers'; room: string }
-  | { type: 'message'; room: string; message: string };
-
-type OutgoingMessage = 
-  | {};
 
 wss.on('connection', (ws: WebSocket) => {
   const clientId = crypto.randomUUID();
@@ -38,6 +29,8 @@ wss.on('connection', (ws: WebSocket) => {
   // Handle messages
   ws.on('message', (data) => {
     let msg: IncomingMessage;
+
+    // test valid JSON
     try {
       msg = JSON.parse(data.toString());
     } catch (err) {

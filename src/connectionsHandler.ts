@@ -1,4 +1,5 @@
-import { WebSocket } from 'ws';
+import { WebSocket } from "ws";
+import { OutgoingMessage } from "./dto";
 
 export type ClientData = {
   id: string;
@@ -13,9 +14,10 @@ export type RoomData = {
 };
 
 export enum ERoomType {
-  Public = 'public',
-  Private = 'private'
+  Public = "public",
+  Private = "private",
 }
+
 export default class ConnectionsHandler {
   public rooms: Map<string, RoomData>;
   public clients: Map<string, ClientData>;
@@ -23,6 +25,10 @@ export default class ConnectionsHandler {
   constructor() {
     this.rooms = new Map();
     this.clients = new Map();
+  }
+
+  private send(ws: WebSocket, msg: OutgoingMessage): void {
+    ws.send(JSON.stringify(msg));
   }
 
   public addClient(clientId: string, ws: WebSocket): void {
@@ -34,43 +40,37 @@ export default class ConnectionsHandler {
   public removeClient(clientId: string): void {
     const client = this.clients.get(clientId);
     if (!client) return;
-    // Leave all rooms
+
     for (const roomName of Array.from(client.rooms)) {
       this.leaveRoom(clientId, roomName);
     }
+
     this.clients.delete(clientId);
   }
 
-  public joinRoom(
-    clientId: string,
-    roomName: string
-  ): void {
-    // Ensure client exists
+  public joinRoom(clientId: string, roomName: string): void {
     const client = this.clients.get(clientId);
     if (!client) return;
 
-    // Get or create room
     let room = this.rooms.get(roomName);
     if (!room) {
       room = { name: roomName, clients: new Set(), type: ERoomType.Public };
       this.rooms.set(roomName, room);
-      // Update Room List for everyone on newly created room
       this.broadcastRoomList();
     }
 
-    // Link both sides
     room.clients.add(clientId);
     client.rooms.add(roomName);
 
-    // Notify client
-    client.ws.send(JSON.stringify({ type: 'subscribed', room: roomName }));
-    // Broadcast updated user list
+    const msg: OutgoingMessage = { type: "subscribed", room: roomName };
+    this.send(client.ws, msg);
+
     this.broadcastRoomUserList(roomName);
   }
 
   public leaveRoom(clientId: string, roomName: string): void {
-    const room = this.rooms.get(roomName);
     const client = this.clients.get(clientId);
+    const room = this.rooms.get(roomName);
     if (!client) return;
 
     if (room) {
@@ -82,7 +82,8 @@ export default class ConnectionsHandler {
     }
 
     client.rooms.delete(roomName);
-    client.ws.send(JSON.stringify({ type: 'unsubscribed', room: roomName }));
+    const msg: OutgoingMessage = { type: "unsubscribed", room: roomName };
+    this.send(client.ws, msg);
 
     if (room) {
       this.broadcastRoomUserList(roomName);
@@ -92,19 +93,20 @@ export default class ConnectionsHandler {
   public sendRoomList(clientId: string): void {
     const client = this.clients.get(clientId);
     if (!client) return;
-  
+
     const rooms = this.listPublicRooms();
-  
-    client.ws.send(JSON.stringify({ type: 'rooms', rooms }));
+    const msg: OutgoingMessage = { type: "rooms", rooms };
+    this.send(client.ws, msg);
   }
-  
+
   public broadcastRoomList(): void {
-    const rooms = this.listPublicRooms()
-  
+    const rooms = this.listPublicRooms();
+    const msg: OutgoingMessage = { type: "rooms", rooms };
+
     for (const clientData of this.clients.values()) {
-      clientData.ws.send(JSON.stringify({ type: 'rooms', rooms }));
+      this.send(clientData.ws, msg);
     }
-  }  
+  }
 
   public sendUserList(clientId: string, roomName: string): void {
     const client = this.clients.get(clientId);
@@ -112,10 +114,11 @@ export default class ConnectionsHandler {
     if (!client) return;
 
     const users = room
-      ? Array.from(room.clients).filter(id => id !== clientId)
+      ? Array.from(room.clients).filter((id) => id !== clientId)
       : [];
 
-    client.ws.send(JSON.stringify({ type: 'users', room: roomName, users }));
+    const msg: OutgoingMessage = { type: "users", room: roomName, users };
+    this.send(client.ws, msg);
   }
 
   public broadcastRoomUserList(roomName: string): void {
@@ -123,9 +126,11 @@ export default class ConnectionsHandler {
     if (!room) return;
 
     const users = Array.from(room.clients);
+    const msg: OutgoingMessage = { type: "users", room: roomName, users };
+
     for (const id of users) {
       const client = this.clients.get(id);
-      client?.ws.send(JSON.stringify({ type: 'users', room: roomName, users }));
+      if (client) this.send(client.ws, msg);
     }
   }
 
@@ -137,23 +142,23 @@ export default class ConnectionsHandler {
     const room = this.rooms.get(roomName);
     if (!room) return;
 
-    const payload = JSON.stringify({
-      type: 'message',
+    const payload: OutgoingMessage = {
+      type: "message",
       room: roomName,
       from: senderId,
       message,
       timestamp: Date.now(),
-    });
+    };
 
     for (const id of room.clients) {
       const client = this.clients.get(id);
-      client?.ws.send(payload);
+      if (client) this.send(client.ws, payload);
     }
   }
 
   private listPublicRooms(): string[] {
     return Array.from(this.rooms.values())
-    .filter(r => r.type === ERoomType.Public)
-    .map(r => r.name);
+      .filter((r) => r.type === ERoomType.Public)
+      .map((r) => r.name);
   }
 }
