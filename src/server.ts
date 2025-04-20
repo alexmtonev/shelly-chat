@@ -62,6 +62,10 @@ wss.on('connection', (ws: WebSocket) => {
         connections.broadcastMessage(clientId, msg.room, msg.message);
         break;
 
+      case 'directMessage':
+        connections.sendDirectMessage(clientId, msg.to, msg.message);
+        break;
+
       default:
         ws.send(JSON.stringify({ type: 'error', message: 'Unknown message type' }));
         break;

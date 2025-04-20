@@ -156,6 +156,52 @@ export default class ConnectionsHandler {
     }
   }
 
+  public sendDirectMessage(
+    senderId: string,
+    recipientId: string,
+    message: string
+  ): void {
+    const sender = this.clients.get(senderId);
+    const recipient = this.clients.get(recipientId);
+    if (!sender || !recipient) return;
+
+    // Create a private room with both clients
+    const room = this.createPrivateRoom([senderId, recipientId]);
+
+    // Broadcast the message to private room
+    this.broadcastMessage(senderId, room.name, message);
+  }
+
+  private createPrivateRoom(clients: string[]): RoomData {
+    // Sort all client IDs to ensure deterministic room name
+    const sortedClients = [...clients].sort();
+    const roomName = `private-${sortedClients.join("-")}`;
+
+    // Ensure room doesn't already exist
+    let room = this.rooms.get(roomName);
+    if (room) {
+      return room;
+    }
+
+    // Build new private room
+    room = { 
+      name: roomName,
+      clients: new Set<string>(sortedClients),
+      type: ERoomType.Private
+    };
+    this.rooms.set(roomName, room);
+
+    // Add room to each client's data
+    for (const clientId of sortedClients) {
+      const clientData = this.clients.get(clientId);
+      if (clientData) {
+        clientData.rooms.add(roomName);
+      }
+    }
+
+    return room;
+  }
+
   private listPublicRooms(): string[] {
     return Array.from(this.rooms.values())
       .filter((r) => r.type === ERoomType.Public)

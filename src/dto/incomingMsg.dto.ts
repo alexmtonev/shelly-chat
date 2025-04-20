@@ -1,6 +1,7 @@
 export type IncomingMessage =
-  | { type: 'listRooms' }
-  | { type: 'subscribe';   room: string }
-  | { type: 'unsubscribe'; room: string }
-  | { type: 'listUsers';   room: string }
-  | { type: 'message';     room: string; message: string };
+  | { type: "listRooms" }
+  | { type: "subscribe"; room: string }
+  | { type: "unsubscribe"; room: string }
+  | { type: "listUsers"; room: string }
+  | { type: "message"; room: string; message: string }
+  | { type: "directMessage"; to: string; message: string };
