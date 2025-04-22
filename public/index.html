@@ -139,6 +139,7 @@
           clientId: "",
           rooms: [],
           joinedRooms: new Set(),
+          privateRooms: new Set(),
           activeRoom: "",
           messages: {}, // { room: [msgs] }
           directMessages: {}, // { user: [msgs] }
@@ -164,7 +165,7 @@
                 break;
 
               case "rooms":
-                this.rooms = msg.rooms;
+                this.rooms = [...msg.rooms, ...this.privateRooms];
                 break;
 
               case "subscribed":
@@ -193,19 +194,13 @@
                 if (msg.isPrivate) {
                   if (!this.rooms.includes(msg.room)) {
                     this.rooms.push(msg.room);
+                    this.privateRooms.add(msg.room);
                   }
                 }
                 if (!this.messages[msg.room]) {
                   this.messages[msg.room] = [];
                 }
                 this.messages[msg.room].push(msg);
-                break;
-
-              case "directMessage":
-                const other = msg.from === this.clientId ? msg.to : msg.from;
-                if (!this.directMessages[other])
-                  this.directMessages[other] = [];
-                this.directMessages[other].push(msg);
                 break;
             }
           },
