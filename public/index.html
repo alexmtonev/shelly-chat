@@ -34,47 +34,44 @@
           </template>
         </div>
       </div>
-
       <!-- Middle Column: Chat -->
       <div class="column">
         <div class="chat-header">
           <h2 x-text="activeRoom || 'No Room Selected'"></h2>
-          <button x-show="joinedRooms.has(activeRoom)" @click="leaveRoom()">
-            Leave
-          </button>
-        </div>
-        <div class="chat-main">
           <template x-if="activeRoom">
             <div>
-              <template x-if="joinedRooms.has(activeRoom)">
-                <div class="chat-messages">
-                  <template
-                    x-for="msg in messages[activeRoom] || []"
-                    :key="msg.timestamp"
-                  >
-                    <div class="message">
-                      <strong x-text="msg.from"></strong>:
-                      <span x-text="msg.message"></span>
-                      <small
-                        x-text="new Date(msg.timestamp).toLocaleTimeString()"
-                      ></small>
-                    </div>
-                  </template>
-                </div>
-              </template>
-              <template x-if="!joinedRooms.has(activeRoom)">
-                <div class="chat-join">
-                  <button @click="joinRoom(activeRoom)">Join Room</button>
-                </div>
-              </template>
-            </div>
-          </template>
-          <template x-if="!activeRoom">
-            <div class="chat-join">
-              <p>Select a room to begin</p>
+              <button x-show="joinedRooms.has(activeRoom)" @click="leaveRoom()">
+                Leave
+              </button>
+              <button
+                x-show="!joinedRooms.has(activeRoom)"
+                @click="joinRoom(activeRoom)"
+              >
+                Join
+              </button>
             </div>
           </template>
         </div>
+
+        <template x-if="joinedRooms.has(activeRoom)">
+          <div class="chat-main">
+            <div class="chat-messages">
+              <template
+                x-for="msg in messages[activeRoom] || []"
+                :key="msg.timestamp"
+              >
+                <div class="message">
+                  <strong x-text="msg.from"></strong>:
+                  <span x-text="msg.message"></span>
+                  <small
+                    x-text="new Date(msg.timestamp).toLocaleTimeString()"
+                  ></small>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
         <div class="chat-input" x-show="joinedRooms.has(activeRoom)">
           <input
             type="text"
@@ -93,9 +90,12 @@
         </div>
         <div class="users-list">
           <h3>Users in Room</h3>
-          <template x-for="user in roomUsers[activeRoom] || []" :key="user">
-            <div class="user-item" x-text="user"></div>
-          </template>
+          <template x-for="user in roomUsers[activeRoom]?.filter(u => u !== clientId) || []" :key="user">
+            <div 
+              class="user-item"
+              x-text="user"
+            ></div>
+          </template>          
         </div>
       </div>
     </div>
@@ -141,9 +141,7 @@
                 this.joinedRooms.add(msg.room);
                 // 2. Switch to it
                 this.activeRoom = msg.room;
-                // 3. Fetch its current users
-                this.fetchUsers(msg.room);
-                // 4. Initialize its message list if it doesn't exist yet
+                // 3. Initialize its message list if it doesn't exist yet
                 if (!this.messages[msg.room]) {
                   this.messages[msg.room] = [];
                 }

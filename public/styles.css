@@ -47,6 +47,11 @@
   margin-bottom: 0.5rem;
 }
 
+.room-item,
+.user-item {
+  cursor: pointer;
+}
+
 .room-item.active {
   background: #e0e0e0;
 }
