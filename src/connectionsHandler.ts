@@ -56,6 +56,7 @@ export default class ConnectionsHandler {
     if (!room) {
       room = { name: roomName, clients: new Set(), type: ERoomType.Public };
       this.rooms.set(roomName, room);
+      console.log(`New room has been created - "${roomName}"`);
       this.broadcastRoomList();
     }
 
@@ -64,6 +65,8 @@ export default class ConnectionsHandler {
 
     const msg: OutgoingMessage = { type: "subscribed", room: roomName };
     this.send(client.ws, msg);
+
+    console.log(`User ${client.id} joined "${roomName}" room`);
 
     this.broadcastRoomUserList(roomName);
   }
@@ -78,12 +81,15 @@ export default class ConnectionsHandler {
       if (room.clients.size === 0) {
         this.rooms.delete(roomName);
         this.broadcastRoomList();
+        console.log(`Room "${roomName}" has been deleted`);
       }
     }
 
     client.rooms.delete(roomName);
     const msg: OutgoingMessage = { type: "unsubscribed", room: roomName };
     this.send(client.ws, msg);
+
+    console.log(`User ${client.id} left "${roomName}" room`);
 
     if (room) {
       this.broadcastRoomUserList(roomName);
