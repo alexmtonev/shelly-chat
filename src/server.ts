@@ -1,6 +1,7 @@
 import express from 'express';
 import http from 'http';
 import path from 'path';
+import 'dotenv/config';
 import { WebSocketServer, WebSocket } from 'ws';
 import ConnectionsHandler from './connectionsHandler';
 import { IncomingMessage } from './dto';
