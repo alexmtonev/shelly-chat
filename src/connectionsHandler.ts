@@ -154,6 +154,7 @@ export default class ConnectionsHandler {
       from: senderId,
       message,
       timestamp: Date.now(),
+      isPrivate: room.type === ERoomType.Private ? true : undefined,
     };
 
     for (const id of room.clients) {

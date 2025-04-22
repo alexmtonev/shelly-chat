@@ -26,7 +26,7 @@
         <div class="rooms-list">
           <template x-for="room in rooms" :key="room">
             <div
-              :class="{'room-item': true, active: activeRoom === room}"
+              :class="{'room-item': true, active: activeRoom === room && !directMode}"
               @click="selectRoom(room)"
             >
               <span x-text="room"></span>
@@ -34,11 +34,16 @@
           </template>
         </div>
       </div>
+
       <!-- Middle Column: Chat -->
       <div class="column">
         <div class="chat-header">
-          <h2 x-text="activeRoom || 'No Room Selected'"></h2>
-          <template x-if="activeRoom">
+          <h2
+            x-text="directMode ? `Chat with ${currentDirectUser}` : (activeRoom || 'No Room Selected')"
+          ></h2>
+
+          <!-- Room controls: only when in a room context -->
+          <template x-if="!directMode && activeRoom">
             <div>
               <button x-show="joinedRooms.has(activeRoom)" @click="leaveRoom()">
                 Leave
@@ -53,9 +58,27 @@
           </template>
         </div>
 
-        <template x-if="joinedRooms.has(activeRoom)">
-          <div class="chat-main">
-            <div class="chat-messages">
+        <!-- Chat messages -->
+        <div class="chat-main">
+          <div class="chat-messages">
+            <!-- Direct messages -->
+            <template x-if="directMode">
+              <template
+                x-for="msg in directMessages[currentDirectUser] || []"
+                :key="msg.timestamp"
+              >
+                <div class="message">
+                  <strong x-text="msg.from"></strong>:
+                  <span x-text="msg.message"></span>
+                  <small
+                    x-text="new Date(msg.timestamp).toLocaleTimeString()"
+                  ></small>
+                </div>
+              </template>
+            </template>
+
+            <!-- Room messages -->
+            <template x-if="!directMode && joinedRooms.has(activeRoom)">
               <template
                 x-for="msg in messages[activeRoom] || []"
                 :key="msg.timestamp"
@@ -68,18 +91,22 @@
                   ></small>
                 </div>
               </template>
-            </div>
+            </template>
           </div>
-        </template>
+        </div>
 
-        <div class="chat-input" x-show="joinedRooms.has(activeRoom)">
+        <!-- Chat input: shows for room if joined OR for direct chats -->
+        <div
+          class="chat-input"
+          x-show="directMode || joinedRooms.has(activeRoom)"
+        >
           <input
             type="text"
             placeholder="Type a message..."
             x-model="newMessage"
-            @keyup.enter="sendMessage()"
+            @keyup.enter="handleSend()"
           />
-          <button @click="sendMessage()">Send</button>
+          <button @click="handleSend()">Send</button>
         </div>
       </div>
 
@@ -90,12 +117,17 @@
         </div>
         <div class="users-list">
           <h3>Users in Room</h3>
-          <template x-for="user in roomUsers[activeRoom]?.filter(u => u !== clientId) || []" :key="user">
-            <div 
-              class="user-item"
-              x-text="user"
-            ></div>
-          </template>          
+          <template
+            x-for="user in roomUsers[activeRoom]?.filter(u => u !== clientId) || []"
+            :key="user"
+          >
+            <div
+              :class="{'user-item': true, active: directMode && currentDirectUser === user}"
+              @click="selectUser(user)"
+            >
+              <span x-text="user"></span>
+            </div>
+          </template>
         </div>
       </div>
     </div>
@@ -108,10 +140,13 @@
           rooms: [],
           joinedRooms: new Set(),
           activeRoom: "",
-          messages: {}, //{ from: 'user1', message: 'Hello!', timestamp: 123456789 },
-          roomUsers: {}, // { room1: ['user1', 'user2', 'user3'] }
+          messages: {}, // { room: [msgs] }
+          directMessages: {}, // { user: [msgs] }
+          roomUsers: {}, // { room: [users] }
           newRoomName: "",
           newMessage: "",
+          directMode: false,
+          currentDirectUser: "",
 
           init() {
             this.ws = new WebSocket(`ws://${location.host}`);
@@ -124,15 +159,11 @@
           handleMessage(msg) {
             switch (msg.type) {
               case "connected":
-                // Set the client ID received from server
                 this.clientId = msg.id;
-                // Request the list of available rooms
-                console.log("connected");
                 this.listRooms();
                 break;
 
               case "rooms":
-                // Replace the current list of rooms with the new list
                 this.rooms = msg.rooms;
                 break;
 
@@ -142,34 +173,45 @@
                 // 2. Switch to it
                 this.activeRoom = msg.room;
                 // 3. Initialize its message list if it doesn't exist yet
+                this.directMode = false;
                 if (!this.messages[msg.room]) {
                   this.messages[msg.room] = [];
                 }
                 break;
 
               case "unsubscribed":
-                // Remove the room from the Set of joined rooms
                 this.joinedRooms.delete(msg.room);
-                // If the user just left the active room, clear it
                 if (this.activeRoom === msg.room) this.activeRoom = "";
                 break;
 
               case "users":
-                // initialize or replace the array for this room
                 this.roomUsers[msg.room] = msg.users;
                 break;
 
               case "message":
+                // Add private rooms to the rooms list
+                if (msg.isPrivate) {
+                  if (!this.rooms.includes(msg.room)) {
+                    this.rooms.push(msg.room);
+                  }
+                }
                 if (!this.messages[msg.room]) {
                   this.messages[msg.room] = [];
                 }
                 this.messages[msg.room].push(msg);
                 break;
+
+              case "directMessage":
+                const other = msg.from === this.clientId ? msg.to : msg.from;
+                if (!this.directMessages[other])
+                  this.directMessages[other] = [];
+                this.directMessages[other].push(msg);
+                break;
             }
           },
+
           listRooms() {
             this.ws.send(JSON.stringify({ type: "listRooms" }));
-            console.log("sent listRooms");
           },
 
           createRoom() {
@@ -186,9 +228,9 @@
 
           selectRoom(room) {
             this.activeRoom = room;
+            this.directMode = false;
             if (this.joinedRooms.has(room)) {
               this.fetchUsers(room);
-              // existing messages are retained
             }
           },
 
@@ -208,8 +250,24 @@
             this.ws.send(JSON.stringify({ type: "listUsers", room }));
           },
 
-          sendMessage() {
-            if (this.newMessage.trim() && this.activeRoom) {
+          selectUser(user) {
+            this.directMode = true;
+            this.currentDirectUser = user;
+            if (!this.directMessages[user]) this.directMessages[user] = [];
+          },
+
+          handleSend() {
+            if (!this.newMessage.trim()) return;
+            if (this.directMode && this.currentDirectUser) {
+              this.ws.send(
+                JSON.stringify({
+                  type: "directMessage",
+                  to: this.currentDirectUser,
+                  message: this.newMessage.trim(),
+                })
+              );
+              this.directMode = false;
+            } else if (this.activeRoom) {
               this.ws.send(
                 JSON.stringify({
                   type: "message",
@@ -217,8 +275,8 @@
                   message: this.newMessage.trim(),
                 })
               );
-              this.newMessage = "";
             }
+            this.newMessage = "";
           },
         };
       }
