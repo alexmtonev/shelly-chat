@@ -1,36 +1,229 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebSocket Chat Demo</title>
-  <link rel="stylesheet" href="/style.css" />
-  <script defer src="/main.js"></script>
-</head>
-<body>
-  <div id="chat-container">
-    <aside id="rooms">
-      <h2>Rooms</h2>
-      <ul id="room-list"></ul>
-      <input id="room-input" placeholder="Room name" />
-      <button id="join-btn">Join</button>
-    </aside>
-    <section id="chat">
-      <header>
-        <h2 id="current-room">No room</h2>
-        <button id="leave-btn" disabled>Leave</button>
-      </header>
-      <div id="messages"></div>
-      <footer>
-        <input id="msg-input" placeholder="Type a message" disabled />
-        <button id="send-btn" disabled>Send</button>
-      </footer>
-    </section>
-    <aside id="users">
-      <h2>Users</h2>
-      <ul id="user-list"></ul>
-    </aside>
-  </div>
-</body>
+<html lang="en" x-data="chatApp()" x-init="init()">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebSocket Chat</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+      defer
+    ></script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Left Column: Rooms -->
+      <div class="column">
+        <div class="rooms-create">
+          <input
+            type="text"
+            placeholder="New room name"
+            x-model="newRoomName"
+            @keyup.enter="createRoom()"
+          />
+          <button @click="createRoom()">Create</button>
+        </div>
+        <div class="rooms-list">
+          <template x-for="room in rooms" :key="room">
+            <div
+              :class="{'room-item': true, active: activeRoom === room}"
+              @click="selectRoom(room)"
+            >
+              <span x-text="room"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+      <!-- Middle Column: Chat -->
+      <div class="column">
+        <div class="chat-header">
+          <h2 x-text="activeRoom || 'No Room Selected'"></h2>
+          <button x-show="joinedRooms.has(activeRoom)" @click="leaveRoom()">
+            Leave
+          </button>
+        </div>
+        <div class="chat-main">
+          <template x-if="activeRoom">
+            <div>
+              <template x-if="joinedRooms.has(activeRoom)">
+                <div class="chat-messages">
+                  <template
+                    x-for="msg in messages[activeRoom] || []"
+                    :key="msg.timestamp"
+                  >
+                    <div class="message">
+                      <strong x-text="msg.from"></strong>:
+                      <span x-text="msg.message"></span>
+                      <small
+                        x-text="new Date(msg.timestamp).toLocaleTimeString()"
+                      ></small>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!joinedRooms.has(activeRoom)">
+                <div class="chat-join">
+                  <button @click="joinRoom(activeRoom)">Join Room</button>
+                </div>
+              </template>
+            </div>
+          </template>
+          <template x-if="!activeRoom">
+            <div class="chat-join">
+              <p>Select a room to begin</p>
+            </div>
+          </template>
+        </div>
+        <div class="chat-input" x-show="joinedRooms.has(activeRoom)">
+          <input
+            type="text"
+            placeholder="Type a message..."
+            x-model="newMessage"
+            @keyup.enter="sendMessage()"
+          />
+          <button @click="sendMessage()">Send</button>
+        </div>
+      </div>
+
+      <!-- Right Column: Users -->
+      <div class="column">
+        <div class="client-id">
+          <strong>Your ID:</strong> <span x-text="clientId"></span>
+        </div>
+        <div class="users-list">
+          <h3>Users in Room</h3>
+          <template x-for="user in roomUsers[activeRoom] || []" :key="user">
+            <div class="user-item" x-text="user"></div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function chatApp() {
+        return {
+          ws: null,
+          clientId: "",
+          rooms: [],
+          joinedRooms: new Set(),
+          activeRoom: "",
+          messages: {}, //{ from: 'user1', message: 'Hello!', timestamp: 123456789 },
+          roomUsers: {}, // { room1: ['user1', 'user2', 'user3'] }
+          newRoomName: "",
+          newMessage: "",
+
+          init() {
+            this.ws = new WebSocket(`ws://${location.host}`);
+            this.ws.addEventListener("message", (e) => {
+              const msg = JSON.parse(e.data);
+              this.handleMessage(msg);
+            });
+          },
+
+          handleMessage(msg) {
+            switch (msg.type) {
+              case "connected":
+                // Set the client ID received from server
+                this.clientId = msg.id;
+                // Request the list of available rooms
+                console.log("connected");
+                this.listRooms();
+                break;
+
+              case "rooms":
+                // Replace the current list of rooms with the new list
+                this.rooms = msg.rooms;
+                break;
+
+              case "subscribed":
+                // 1. Mark the room as joined
+                this.joinedRooms.add(msg.room);
+                // 2. Switch to it
+                this.activeRoom = msg.room;
+                // 3. Fetch its current users
+                this.fetchUsers(msg.room);
+                // 4. Initialize its message list if it doesn't exist yet
+                if (!this.messages[msg.room]) {
+                  this.messages[msg.room] = [];
+                }
+                break;
+
+              case "unsubscribed":
+                // Remove the room from the Set of joined rooms
+                this.joinedRooms.delete(msg.room);
+                // If the user just left the active room, clear it
+                if (this.activeRoom === msg.room) this.activeRoom = "";
+                break;
+
+              case "users":
+                // initialize or replace the array for this room
+                this.roomUsers[msg.room] = msg.users;
+                break;
+
+              case "message":
+                if (!this.messages[msg.room]) {
+                  this.messages[msg.room] = [];
+                }
+                this.messages[msg.room].push(msg);
+                break;
+            }
+          },
+          listRooms() {
+            this.ws.send(JSON.stringify({ type: "listRooms" }));
+            console.log("sent listRooms");
+          },
+
+          createRoom() {
+            if (this.newRoomName.trim()) {
+              this.ws.send(
+                JSON.stringify({
+                  type: "subscribe",
+                  room: this.newRoomName.trim(),
+                })
+              );
+              this.newRoomName = "";
+            }
+          },
+
+          selectRoom(room) {
+            this.activeRoom = room;
+            if (this.joinedRooms.has(room)) {
+              this.fetchUsers(room);
+              // existing messages are retained
+            }
+          },
+
+          joinRoom(room) {
+            if (room) this.ws.send(JSON.stringify({ type: "subscribe", room }));
+          },
+
+          leaveRoom() {
+            if (this.activeRoom) {
+              this.ws.send(
+                JSON.stringify({ type: "unsubscribe", room: this.activeRoom })
+              );
+            }
+          },
+
+          fetchUsers(room) {
+            this.ws.send(JSON.stringify({ type: "listUsers", room }));
+          },
+
+          sendMessage() {
+            if (this.newMessage.trim() && this.activeRoom) {
+              this.ws.send(
+                JSON.stringify({
+                  type: "message",
+                  room: this.activeRoom,
+                  message: this.newMessage.trim(),
+                })
+              );
+              this.newMessage = "";
+            }
+          },
+        };
+      }
+    </script>
+  </body>
 </html>
